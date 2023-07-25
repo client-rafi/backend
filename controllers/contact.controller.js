@@ -23,7 +23,7 @@ const createNewContact = async (req, res) => {
   } catch (error) {
     // If there's an error, respond with an error message
     console.error("Error saving contact data:", error);
-    res.status(500).json({ error: "Error saving contact data" });
+    res.status(500).json({ error: error });
   }
 };
 
