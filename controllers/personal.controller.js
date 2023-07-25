@@ -2,14 +2,12 @@
 import Personal from "../models/personal.model.js";
 import { v2 as cloudinary } from "cloudinary";
 
-
 // Configure Cloudinary with the appropriate credentials (API Key and API Secret)
 cloudinary.config({
   cloud_name: "dt5u8pnw3",
   api_key: "738738889919963",
   api_secret: "p4AA8CjQDKrJmwPoEPn2B34CzXk",
 });
-
 
 // Middleware to handle errors
 const errorHandler = (res, error) => {
@@ -25,28 +23,33 @@ export const createNewPersonal = async (req, res) => {
 
     // Upload images to Cloudinary and update the personalData object with the image URLs
     if (req.files) {
+      const uploadPromises = [];
+
       for (const key in req.files) {
         const fileArray = req.files[key];
         if (fileArray && fileArray.length > 0) {
-          try {
-            // Access the file stream from Multer and directly upload to Cloudinary
-            const result = await cloudinary.uploader.upload_stream(
+          // Create a promise-based function for Cloudinary upload
+          const uploadPromise = new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
               { resource_type: "auto" }, // Set resource_type to 'auto' to let Cloudinary determine the file type
               (error, result) => {
                 if (error) {
                   console.error("Cloudinary Upload Error:", error);
-                  return res.status(500).json({ error: "Error uploading files" });
+                  reject(error);
+                } else {
+                  // Update the personalData object with the Cloudinary URL using the field name
+                  personalData[key] = result.secure_url;
+                  resolve();
                 }
-                personalData[key] = result.secure_url;
               }
             ).end(fileArray[0].buffer);
-          } catch (error) {
-            // Handle Cloudinary upload errors
-            console.error("Cloudinary Upload Error:", error);
-            return res.status(500).json({ error: "Error uploading files" });
-          }
+          });
+          uploadPromises.push(uploadPromise);
         }
       }
+
+      // Wait for all Cloudinary upload promises to resolve
+      await Promise.all(uploadPromises);
     }
 
     const personal = new Personal(personalData);
