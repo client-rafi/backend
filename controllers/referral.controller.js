@@ -1,18 +1,22 @@
+// referral.controller.js
 import Referral from "../models/referral.model.js";
-import PDFDocument from "pdfkit";
-import nodemailer from "nodemailer";
-import fs from "fs";
 import { v2 as cloudinary } from "cloudinary";
 
-process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
-
+// Configure Cloudinary with the appropriate credentials (API Key and API Secret)
 cloudinary.config({
   cloud_name: "dt5u8pnw3",
   api_key: "738738889919963",
   api_secret: "p4AA8CjQDKrJmwPoEPn2B34CzXk",
 });
 
-const createNewReferral = async (req, res) => {
+// Middleware to handle errors
+const errorHandler = (res, error) => {
+  console.error("Error:", error);
+  res.status(500).json({ error: "An error occurred" });
+};
+
+// Controller function to create a new referral
+export const createNewReferral = async (req, res) => {
   try {
     // Save the form data to the database
     const referralData = req.body;
@@ -22,8 +26,23 @@ const createNewReferral = async (req, res) => {
       for (const key in req.files) {
         const fileArray = req.files[key];
         if (fileArray && fileArray.length > 0) {
-          const result = await cloudinary.uploader.upload(fileArray[0].path);
-          referralData[key] = result.secure_url;
+          try {
+            // Access the file stream from Multer and directly upload to Cloudinary
+            const result = await cloudinary.uploader.upload_stream(
+              { resource_type: "auto" }, // Set resource_type to 'auto' to let Cloudinary determine the file type
+              (error, result) => {
+                if (error) {
+                  console.error("Cloudinary Upload Error:", error);
+                  return res.status(500).json({ error: "Error uploading files" });
+                }
+                referralData[key] = result.secure_url;
+              }
+            ).end(fileArray[0].buffer);
+          } catch (error) {
+            // Handle Cloudinary upload errors
+            console.error("Cloudinary Upload Error:", error);
+            return res.status(500).json({ error: "Error uploading files" });
+          }
         }
       }
     }
@@ -31,35 +50,21 @@ const createNewReferral = async (req, res) => {
     const referral = new Referral(referralData);
     await referral.save();
 
- 
-
     res.status(201).json({ message: "Form submitted successfully." });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: error });
+    errorHandler(res, error);
   }
 };
 
-
-
-
-
 // Controller function to get the list of all referrals
-const getAllReferral= async (req, res) => {
+export const getAllReferral = async (req, res) => {
   try {
-    // Fetch all contacts from the database
+    // Fetch all referrals from the database
     const referrals = await Referral.find();
 
     // Respond with the list of referrals
     res.status(200).json(referrals);
   } catch (error) {
-    // If there's an error, respond with an error message
-    console.error("Error fetching contacts:", error);
-    res.status(500).json({ error: "Error fetching contacts" });
+    errorHandler(res, error);
   }
 };
-
-
-export {
-  createNewReferral , getAllReferral
-}
