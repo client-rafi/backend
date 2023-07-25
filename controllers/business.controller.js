@@ -23,28 +23,33 @@ export const createNewBusiness = async (req, res) => {
 
     // Upload images to Cloudinary and update the businessData object with the image URLs
     if (req.files) {
+      const uploadPromises = [];
+
       for (const key in req.files) {
         const fileArray = req.files[key];
         if (fileArray && fileArray.length > 0) {
-          try {
-            // Access the file stream from Multer and directly upload to Cloudinary
-            const result = await cloudinary.uploader.upload_stream(
+          // Create a promise-based function for Cloudinary upload
+          const uploadPromise = new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
               { resource_type: "auto" }, // Set resource_type to 'auto' to let Cloudinary determine the file type
               (error, result) => {
                 if (error) {
                   console.error("Cloudinary Upload Error:", error);
-                  return res.status(500).json({ error: "Error uploading files" });
+                  reject(error);
+                } else {
+                  // Update the businessData object with the Cloudinary URL using the field name
+                  businessData[key] = result.secure_url;
+                  resolve();
                 }
-                businessData[key] = result.secure_url;
               }
             ).end(fileArray[0].buffer);
-          } catch (error) {
-            // Handle Cloudinary upload errors
-            console.error("Cloudinary Upload Error:", error);
-            return res.status(500).json({ error: "Error uploading files" });
-          }
+          });
+          uploadPromises.push(uploadPromise);
         }
       }
+
+      // Wait for all Cloudinary upload promises to resolve
+      await Promise.all(uploadPromises);
     }
 
     // Create a new instance of the Business model with the extracted data
