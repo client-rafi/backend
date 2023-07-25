@@ -1,6 +1,6 @@
 // trade.controller.js
 import Trade from "../models/trade.model.js";
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary with the appropriate credentials (API Key and API Secret)
 cloudinary.config({
@@ -18,47 +18,50 @@ const errorHandler = (res, error) => {
 // Controller function to create a new trade
 export const createNewTrade = async (req, res) => {
   try {
-    // Extract trade data from the request body
+    // Save the trade data to the database
     const tradeData = req.body;
 
-    // Extract image URLs from the req.files object and directly upload to Cloudinary
+    // Upload images to Cloudinary and update the tradeData object with the image URLs
     if (req.files) {
+      const uploadPromises = [];
+
       for (const key in req.files) {
         const fileArray = req.files[key];
-        if (fileArray && fileArray.length > 0) {
-          try {
-            // Access the file stream from Multer and directly upload to Cloudinary
-            const result = await cloudinary.uploader.upload_stream(
+        if (fileArray) {
+          const fieldName = fileArray.fieldname; // Get the field name from req.files
+          // Create a promise-based function for Cloudinary upload
+          const uploadPromise = new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
               { resource_type: "auto" }, // Set resource_type to 'auto' to let Cloudinary determine the file type
               (error, result) => {
                 if (error) {
                   console.error("Cloudinary Upload Error:", error);
-                  return res.status(500).json({ error: "Error uploading files" });
+                  reject(error);
+                } else {
+                  // Update the tradeData object with the Cloudinary URL using the field name
+                  tradeData[fieldName] = result.secure_url;
+                  resolve();
                 }
-                tradeData[key] = result.secure_url;
               }
-            ).end(fileArray[0].buffer);
-          } catch (error) {
-            // Handle Cloudinary upload errors
-            console.error("Cloudinary Upload Error:", error);
-            return res.status(500).json({ error: "Error uploading files" });
-          }
+            ).end(fileArray.buffer);
+          });
+          uploadPromises.push(uploadPromise);
         }
       }
+
+      // Wait for all Cloudinary upload promises to resolve
+      await Promise.all(uploadPromises);
     }
 
-    // Create a new trade object
     const newTrade = new Trade(tradeData);
+    await newTrade.save();
 
-    // Save the trade object to the database
-    const savedTrade = await newTrade.save();
-
-    // Respond with the newly created trade
-    res.status(201).json(savedTrade);
+    res.status(201).json({ message: "Trade created successfully." });
   } catch (error) {
     errorHandler(res, error);
   }
 };
+
 
 // Controller function to get the list of all trades
 export const getAllTrades = async (req, res) => {
