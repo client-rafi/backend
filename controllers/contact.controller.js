@@ -44,3 +44,4 @@ const getAllContact= async (req, res) => {
 
 
 export { createNewContact, getAllContact };
+
