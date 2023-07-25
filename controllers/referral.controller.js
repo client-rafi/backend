@@ -18,39 +18,45 @@ const errorHandler = (res, error) => {
 // Controller function to create a new referral
 export const createNewReferral = async (req, res) => {
   try {
-    // Save the form data to the database
+    // Save the referral data to the database
     const referralData = req.body;
 
     // Upload images to Cloudinary and update the referralData object with the image URLs
     if (req.files) {
+      const uploadPromises = [];
+
       for (const key in req.files) {
         const fileArray = req.files[key];
-        if (fileArray && fileArray.length > 0) {
-          try {
-            // Access the file stream from Multer and directly upload to Cloudinary
-            const result = await cloudinary.uploader.upload_stream(
+        if (fileArray) {
+          const fieldName = fileArray.fieldname; // Get the field name from req.files
+          // Create a promise-based function for Cloudinary upload
+          const uploadPromise = new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
               { resource_type: "auto" }, // Set resource_type to 'auto' to let Cloudinary determine the file type
               (error, result) => {
                 if (error) {
                   console.error("Cloudinary Upload Error:", error);
-                  return res.status(500).json({ error: "Error uploading files" });
+                  reject(error);
+                } else {
+                  // Update the referralData object with the Cloudinary URL using the field name
+                  referralData[fieldName] = result.secure_url;
+                  resolve();
                 }
-                referralData[key] = result.secure_url;
               }
-            ).end(fileArray[0].buffer);
-          } catch (error) {
-            // Handle Cloudinary upload errors
-            console.error("Cloudinary Upload Error:", error);
-            return res.status(500).json({ error: "Error uploading files" });
-          }
+            ).end(fileArray.buffer);
+          });
+          uploadPromises.push(uploadPromise);
         }
       }
+
+      // Wait for all Cloudinary upload promises to resolve
+      await Promise.all(uploadPromises);
     }
 
-    const referral = new Referral(referralData);
-    await referral.save();
+    const newReferral = new Referral(referralData);
+    await newReferral.save();
 
-    res.status(201).json({ message: "Form submitted successfully." });
+    res.status(201).json({ message: newReferral });
   } catch (error) {
     errorHandler(res, error);
   }
